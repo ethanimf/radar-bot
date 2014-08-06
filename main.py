@@ -15,6 +15,9 @@
 # limitations under the License.
 #
 import webapp2
+import logging
+
+CRON_HEADER = 'X-AppEngine-Cron'
 
 class MainHandler(webapp2.RequestHandler):
   def get(self):
@@ -22,14 +25,26 @@ class MainHandler(webapp2.RequestHandler):
 
 class TaskHandler(webapp2.RequestHandler):
   def get(self):
-    pass
+    if self.request.headers.get(CRON_HEADER, False):
+      logging.info("Start task: " + self.get_name())
+      self.run_task()
+    else:
+      logging.error("Direct access to task: " + self.get_name())
+      self.response.write("<img src='../fail.gif' />")
+      self.response.write("<p>This is why we can't have nice things.</p>")
 
 class StationTaskHandler(TaskHandler):
-  def get(self):
+  def get_name(self):
+    return 'station'
+
+  def run_task(self):
     self.response.write("I'll get all stations")
 
 class FrameTaskHandler(TaskHandler):
-  def get(self):
+  def get_name(self):
+    return 'frame'
+
+  def run_task(self):
     self.response.write("I'll get all frames")
 
 app = webapp2.WSGIApplication([

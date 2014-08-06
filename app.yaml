@@ -9,6 +9,10 @@ handlers:
   static_files: favicon.ico
   upload: favicon\.ico
 
+- url: /fail\.gif
+  static_files: fail.gif
+  upload: fail.gif
+
 - url: .*
   script: main.app
 
