@@ -4,9 +4,11 @@ import urllib2
 import urlparse
 from cgi import escape
 sys.path.insert(0, 'lib')
-from threadpool import *
 from bs4 import BeautifulSoup
 import logging
+import time
+import Queue
+import threading
 
 __all__ = ['Fetcher', 'Crawler']
 
@@ -56,13 +58,29 @@ class Fetcher(object):
           if url not in self:
             self.urls.append(url)
 
-class Crawler(object):
-  def __init__(self, white_rules, black_rules, max_level = 2):
-    self.white_rules = white_rules
-    self.black_rules = black_rules
-    self.max_level = max_level
-    self.urls = []
-    self._walked = []
+class CrawlerThread(threading.Thread):
+  def __init__(self, crawler, id):
+    threading.Thread.__init__(self)
+    self.crawler = crawler
+    self.id = id
+    self.idle = True
+  def run(self):
+    crawler = self.crawler
+    print "Thread %d started" % (self.id)
+    logging.debug("Thread %d started" % (self.id))
+    while not crawler.shouldExit:
+      if not crawler.queue.empty():
+        self.idle = False
+        task = crawler.queue.get()
+        print task
+        # walk
+        self.walk(task)
+        # done
+        #crawler.queue.task_done()
+        self.idle = True
+      time.sleep(1)
+    print "Thread %d terminated" % (self.id)
+    logging.debug("Thread %d terminated" % (self.id))
 
   def match_rule_list(self, url, rules):
       #url = url.encode('utf-8')
@@ -77,36 +95,61 @@ class Crawler(object):
     urls = []
     for i, url in enumerate(page):
       url = url.encode('utf-8')
-      in_white = self.match_rule_list(url, self.white_rules)
-      in_black = self.match_rule_list(url, self.black_rules)
+      in_white = self.match_rule_list(url, self.crawler.white_rules)
+      in_black = self.match_rule_list(url, self.crawler.black_rules)
       if in_white and not in_black:
         urls.append(url)
     return urls
 
-  def add_to_pool(self, urls, level):
-    tasks = [({'self': self, 'url': url, 'level': level}) for url in urls]
-    requests = makeRequests(self.worker, tasks)
-    [self.pool.putRequest(req) for req in requests]
+  def walk(self, task):
+    url = task[0]
+    level = task[1]
+    crawler = self.crawler
+    urls = self.walk_one(url)
+    crawler.append(urls, level)
 
-  def walk(self, urls):
-    self.pool = ThreadPool(10)
-    self.add_to_pool(urls, 1)
-    self.pool.wait()
+class Crawler(object):
+  def __init__(self, white_rules, black_rules, max_level = 2, max_thread = 10):
+    self.white_rules = white_rules
+    self.black_rules = black_rules
+    self.max_level = max_level
+    self.urls = []
+    self._walked = []
+    self.max_thread = max_thread
+    self._threads = []
+    self.queue = Queue.Queue()
+    self.shouldExit = False
 
-  def worker(self, p):
-    logging.debug("%d: %s" % (p['level'], p['url']))
-    urls = self.walk_one(p['url'])
+  def append(self, urls, level):
+    # Append results
     for url in urls:
       if url not in self.urls:
         self.urls.append(url)
-    logging.debug("Total: %d" % len(self.urls))
-    if p['level'] < self.max_level:
-      u = []
+    # Append queue
+    if level < self.max_level:
+      next_level = level + 1
       for url in urls:
         if url not in self._walked:
-          u.append(url)
+          self.queue.put((url, next_level))
           self._walked.append(url)
-      self.add_to_pool(u, p['level'] + 1)
+    if level != 0:
+      self.queue.task_done()
+    pass
+
+  def walk(self, urls):
+    # Create threads to size
+    for id in range(self.max_thread):
+      t = CrawlerThread(self, id)
+      self._threads.append(t)
+      t.start()
+    self.append(urls, 0)
+    # Wait
+    self.queue.join()
+    # Notify threads to exit
+    self.shouldExit = True
+    # Wait
+    for t in self._threads:
+      t.join()
 
 def main():
   url = 'http://www.nmc.gov.cn/publish/radar/beijing.htm'
