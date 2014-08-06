@@ -66,20 +66,17 @@ class CrawlerThread(threading.Thread):
     self.idle = True
   def run(self):
     crawler = self.crawler
-    print "Thread %d started" % (self.id)
     logging.debug("Thread %d started" % (self.id))
     while not crawler.shouldExit:
       if not crawler.queue.empty():
         self.idle = False
         task = crawler.queue.get()
-        print task
         # walk
         self.walk(task)
         # done
         #crawler.queue.task_done()
         self.idle = True
       time.sleep(1)
-    print "Thread %d terminated" % (self.id)
     logging.debug("Thread %d terminated" % (self.id))
 
   def match_rule_list(self, url, rules):
