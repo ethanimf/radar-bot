@@ -17,9 +17,23 @@
 import webapp2
 
 class MainHandler(webapp2.RequestHandler):
-    def get(self):
-        self.response.write('Hello world!')
+  def get(self):
+    self.response.write('What are you looking at? Get Lost!')
+
+class TaskHandler(webapp2.RequestHandler):
+  def get(self):
+    pass
+
+class StationTaskHandler(TaskHandler):
+  def get(self):
+    self.response.write("I'll get all stations")
+
+class FrameTaskHandler(TaskHandler):
+  def get(self):
+    self.response.write("I'll get all frames")
 
 app = webapp2.WSGIApplication([
-    ('/', MainHandler)
+  ('/', MainHandler),
+  ('/tasks/station', StationTaskHandler),
+  ('/tasks/frame', FrameTaskHandler)
 ], debug=True)
