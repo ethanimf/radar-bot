@@ -21,6 +21,10 @@ class Station(ndb.Model):
   last_commit = ndb.StringProperty()
 
   @classmethod
+  def create_query_for_all(cls):
+    parent = get_parent_key()
+    return cls.query(ancestor = parent)
+  @classmethod
   def create_or_update_from_url(cls, url):
     name = get_name_from_url(url)
     parent = get_parent_key()

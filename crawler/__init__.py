@@ -10,7 +10,7 @@ import time
 import Queue
 import threading
 
-__all__ = ['Fetcher', 'Crawler']
+__all__ = ['Fetcher', 'Crawler', 'CrawlerThread']
 
 AGENT = "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.125 Safari/537.36"
 class Fetcher(object):
@@ -64,6 +64,11 @@ class CrawlerThread(threading.Thread):
     self.crawler = crawler
     self.id = id
     self.idle = True
+    self.init()
+
+  def init(self):
+    pass
+
   def run(self):
     crawler = self.crawler
     logging.debug("Thread %d started" % (self.id))
@@ -86,7 +91,10 @@ class CrawlerThread(threading.Thread):
               return True
       return False
 
-  def walk_one(self, url):
+  def should_walk(self, url, urls, context):
+    return True
+
+  def walk_one(self, url, context):
     page = Fetcher(url)
     page.fetch()
     urls = []
@@ -94,19 +102,22 @@ class CrawlerThread(threading.Thread):
       url = url.encode('utf-8')
       in_white = self.match_rule_list(url, self.crawler.white_rules)
       in_black = self.match_rule_list(url, self.crawler.black_rules)
-      if in_white and not in_black:
+      # Custom filtering
+      should_walk = self.should_walk(url, urls, context)
+      if in_white and not in_black and should_walk:
         urls.append(url)
     return urls
 
   def walk(self, task):
     url = task[0]
     level = task[1]
+    context = task[2]
     crawler = self.crawler
-    urls = self.walk_one(url)
-    crawler.append(urls, level)
+    urls = self.walk_one(url, context)
+    crawler.append(urls, level, context)
 
 class Crawler(object):
-  def __init__(self, white_rules, black_rules, max_level = 2, max_thread = 10):
+  def __init__(self, white_rules, black_rules, max_level = 2, max_thread = 10, thread_klass = CrawlerThread):
     self.white_rules = white_rules
     self.black_rules = black_rules
     self.max_level = max_level
@@ -116,30 +127,54 @@ class Crawler(object):
     self._threads = []
     self.queue = Queue.Queue()
     self.shouldExit = False
+    self._thread_klass = thread_klass
 
-  def append(self, urls, level):
+  def append(self, urls, level, context = None):
     # Append results
     for url in urls:
       if url not in self.urls:
         self.urls.append(url)
+    # TODO: custom append
+    self.on_append(urls, level, context)
     # Append queue
     if level < self.max_level:
       next_level = level + 1
       for url in urls:
         if url not in self._walked:
-          self.queue.put((url, next_level))
+          self.queue.put((url, next_level, context))
           self._walked.append(url)
     if level != 0:
       self.queue.task_done()
     pass
 
-  def walk(self, urls):
-    # Create threads to size
+  def on_append(self, urls, level, context = None):
+    pass
+
+  def _init_threads(self):
     for id in range(self.max_thread):
-      t = CrawlerThread(self, id)
+      t = self._thread_klass(self, id)
       self._threads.append(t)
       t.start()
+
+  def walk(self, urls):
+    # Create threads to size
+    self._init_threads()
     self.append(urls, 0)
+    # Wait
+    self.queue.join()
+    # Notify threads to exit
+    self.shouldExit = True
+    # Wait
+    for t in self._threads:
+      t.join()
+
+  def walk_with_context(self, tasks):
+    # Tasks = [(url, context), ...]
+    self._init_threads()
+    for task in tasks:
+      url = task[0]
+      context = task[1]
+      self.append([url], 0, context)
     # Wait
     self.queue.join()
     # Notify threads to exit
@@ -158,6 +193,7 @@ def main():
   for url in crawler.urls:
     print url
   print "Found %d stations" % (len(crawler.urls))
+  return
   img_rules = ["javascript:view_text_img\((\'.*?\'),(\'.*?\'),'','','','',(\'.*?\'),'',(\'.*?\'),'',''\)"]
   img_crawler = Crawler(img_rules, [], 1)
   img_crawler.walk(crawler.urls)
