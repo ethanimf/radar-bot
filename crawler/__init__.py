@@ -158,5 +158,11 @@ def main():
   for url in crawler.urls:
     print url
   print "Found %d stations" % (len(crawler.urls))
+  img_rules = ["javascript:view_text_img\((\'.*?\'),(\'.*?\'),'','','','',(\'.*?\'),'',(\'.*?\'),'',''\)"]
+  img_crawler = Crawler(img_rules, [], 1)
+  img_crawler.walk(crawler.urls)
+  for url in img_crawler.urls:
+    print url
+  print "Found %d frames" % (len(img_crawler.urls))
 if __name__ == "__main__":
   main()
