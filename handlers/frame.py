@@ -16,6 +16,7 @@ class ImageCrawlerThread(CrawlerThread):
     return True
 
 IMG_URL_RE = "javascript:view_text_img\((\'.*?\'),(\'.*?\'),'','','','',(\'.*?\'),'',(\'.*?\'),'',''\)"
+IMG_ENLARGE_RE = "(http:\/\/image\.weather\.gov\.cn)(.*)"
 
 # 1: Url
 # 2: Station ID
@@ -24,13 +25,17 @@ IMG_URL_RE = "javascript:view_text_img\((\'.*?\'),(\'.*?\'),'','','','',(\'.*?\'
 # 5: MM
 # 6: DD
 # 7: HHmm
-TIME_STAMP_RE = "'(\/product\/\d{4}\/\d{6}\/\d{8}\/RDCP\/SEVP_AOC_RDCP_SLDAS_EBREF_AZ(\d{4})_L88_PI_((\d{4})(\d{2})(\d{2})(\d{4})).*)'"
+TIME_STAMP_RE = "'?(\/product\/\d{4}\/\d{6}\/\d{8}\/RDCP\/SEVP_AOC_RDCP_SLDAS_EBREF_AZ(\d{4})_L88_PI_((\d{4})(\d{2})(\d{2})(\d{4})).*)'?"
 TIME_STAMP_FORMAT = "%Y%m%d%H%M"
 
 def extract_frame_info(script_url):
   url = script_url
   # Extract url with ''
   m = re.match(IMG_URL_RE, url)
+  if not m:
+    m = re.match(IMG_ENLARGE_RE, url)
+  if not m:
+    return
   url = m.group(2)
   # Extract url and date time
   m = re.match(TIME_STAMP_RE, url)
@@ -42,7 +47,7 @@ def extract_frame_info(script_url):
 
 class ImageCrawler(Crawler):
   def __init__(self):
-    Crawler.__init__(self, [IMG_URL_RE], [], 1, 10, ImageCrawlerThread)
+    Crawler.__init__(self, [IMG_URL_RE, IMG_ENLARGE_RE], [], 1, 10, ImageCrawlerThread)
     self.results = {}
 
   def on_append(self, urls, level, context):
@@ -54,6 +59,8 @@ class ImageCrawler(Crawler):
     last_update = datetime.min
     for url in urls:
       r = extract_frame_info(url)
+      if not r:
+        continue
       u = r[0]
       t = r[1]
       id = r[2]
