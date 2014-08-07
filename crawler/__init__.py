@@ -97,6 +97,9 @@ class CrawlerThread(threading.Thread):
   def walk_one(self, url, context):
     page = Fetcher(url)
     page.fetch()
+    # Use url as default context
+    if context == None:
+      context = url
     urls = []
     for i, url in enumerate(page):
       url = url.encode('utf-8')
