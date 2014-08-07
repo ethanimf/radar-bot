@@ -1,5 +1,6 @@
 from task_base import *
 from crawler import *
+from models import *
 #from google.appengine.api import logservice
 #import logging
 
@@ -17,8 +18,8 @@ class StationTaskHandler(TaskHandler):
     logging.info("Start walking")
     crawler.walk([start_url])
     logging.info("Walking finished")
-    #for url in crawler.urls:
-    #  logging.info(url)
+    for url in crawler.urls:
+      Station.create_or_update_from_url(url)
     logging.info("Found %d stations" % (len(crawler.urls)))
     #logservice.flush()
     self.response.set_status(200)
