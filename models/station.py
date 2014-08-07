@@ -7,7 +7,7 @@ def get_parent_key(version = MODEL_VERSION):
   return ndb.Key('Station', "v%d" % (version))
 
 URL_RE = "http:\/\/www\.nmc\.gov\.cn\/publish\/radar\/(stations-)?(.*)\.htm"
-IMG_RE = ""
+
 def get_name_from_url(url):
   m = re.match(URL_RE, url)
   if m:

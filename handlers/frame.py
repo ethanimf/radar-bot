@@ -27,7 +27,7 @@ IMG_URL_RE = "javascript:view_text_img\((\'.*?\'),(\'.*?\'),'','','','',(\'.*?\'
 TIME_STAMP_RE = "'(\/product\/\d{4}\/\d{6}\/\d{8}\/RDCP\/SEVP_AOC_RDCP_SLDAS_EBREF_AZ(\d{4})_L88_PI_((\d{4})(\d{2})(\d{2})(\d{4})).*)'"
 TIME_STAMP_FORMAT = "%Y%m%d%H%M"
 
-def extract_url_and_time(script_url):
+def extract_frame_info(script_url):
   url = script_url
   # Extract url with ''
   m = re.match(IMG_URL_RE, url)
@@ -37,13 +37,13 @@ def extract_url_and_time(script_url):
   url = m.group(1)
   timestamp = m.group(3)
   time = datetime.strptime(timestamp, TIME_STAMP_FORMAT)
-  return (url, time)
+  station_id = m.group(2)
+  return (url, time, station_id)
 
 class ImageCrawler(Crawler):
   def __init__(self):
     Crawler.__init__(self, [IMG_URL_RE], [], 1, 10, ImageCrawlerThread)
     self.results = {}
-    self.new_frame_count = 0
 
   def on_append(self, urls, level, context):
     # TODO: fill results. Group frames by stations
@@ -53,21 +53,16 @@ class ImageCrawler(Crawler):
       return
     last_update = datetime.min
     for url in urls:
-      r = extract_url_and_time(url)
+      r = extract_frame_info(url)
       u = r[0]
       t = r[1]
-      # New frame
-      if context.last_update == None or context.last_update < last_update:
-        self.new_frame_count += 1
+      id = r[2]
+      station = self.stations.get(id)
       # Find newest frame
       if last_update < t:
         last_update = t
-    # Update station record
-    if context.last_update == None or context.last_update < last_update:
-      context.last_update = last_update
-    #logging.debug("URL: %s Timestamp: %s" % (r[0], r[1].strftime("%a %b %d %H:%M:%S %Y")))
-    #logging.debug("Append %d frames for station %s" % (len(urls), context.name))
-    pass
+        if station.last_update == None or station.last_update < last_update:
+          station.last_update = last_update
 
 class FrameTaskHandler(TaskHandler):
   def get_name(self):
@@ -79,15 +74,17 @@ class FrameTaskHandler(TaskHandler):
     logging.info("Find %d stations in store" % (query.count()))
     # TODO: get frame image urls
     tasks = []
+    stations = {}
     for station in query.iter():
       #logging.debug("Station: %s, Url: %s" % (station.name, station.url))
       tasks.append((station.url, station))
+      stations[station.station_id] = station
     # TODO: spawn frame crawlers for each frame (with last_updated and max_frame_count)
     logging.info("Start frame crawler")
     crawler = ImageCrawler()
+    crawler.stations = stations
     crawler.walk_with_context(tasks)
     logging.info("Find %d frames" % (len(crawler.urls)))
-    logging.info("%d new frames since last update" % (crawler.new_frame_count))
     # TODO: download images and create blobs
     # TODO: create tree
     # TODO: commit to GitHub
