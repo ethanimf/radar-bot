@@ -26,7 +26,7 @@ class Station(ndb.Model):
     parent = get_parent_key()
     return cls.query(ancestor = parent)
   @classmethod
-  def create_or_update_from_url(cls, url, id_table):
+  def create_or_update_from_url(cls, url, id_table, put_now = False):
     name = get_name_from_url(url)
     parent = get_parent_key()
     id = id_table.get(name)
@@ -39,5 +39,6 @@ class Station(ndb.Model):
     station.url = url
     station.name = name
     station.station_id = id
-    station.put()
+    if put_now:
+      station.put()
     return station

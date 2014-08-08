@@ -65,11 +65,18 @@ class ImageCrawler(Crawler):
       t = r[1]
       id = r[2]
       station = self.stations.get(id)
+      # Note: this is wrong, station.last_update should be updated when
+      #       all new frames are determined
       # Find newest frame
       if last_update < t:
         last_update = t
         if station.last_update == None or station.last_update < last_update:
           station.last_update = last_update
+
+      # Gather results
+      if not self.results.has_key(id):
+        self.results[id] = []
+
 
 class FrameTaskHandler(TaskHandler):
   def get_name(self):
@@ -96,6 +103,5 @@ class FrameTaskHandler(TaskHandler):
     # TODO: create tree
     # TODO: commit to GitHub
     # Put changes
-    for task in tasks:
-      task[1].put()
+    ndb.put_multi(stations.values())
     self.response.set_status(200)

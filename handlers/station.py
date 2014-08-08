@@ -48,8 +48,12 @@ class StationTaskHandler(TaskHandler):
     logging.info("Start walking")
     crawler.walk([start_url])
     logging.info("Walking finished")
+    stations = []
     for url in crawler.urls:
-      Station.create_or_update_from_url(url, crawler.station_id_table)
+      station = Station.create_or_update_from_url(url, crawler.station_id_table)
+      if station != None:
+        stations.append(station)
+    ndb.put_multi(stations)
     logging.info("Found %d stations, %d with known ID" % (len(crawler.urls), len(crawler.station_id_table)))
     #logservice.flush()
     self.response.set_status(200)
