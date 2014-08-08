@@ -1,6 +1,7 @@
 import sys
 sys.path.insert(0, 'lib')
 from lib.github import *
+import urllib2
 import config
 import base64
 import logging
@@ -93,9 +94,37 @@ class RepoBuilder(Builder):
     Builder.__init__(self, max_thread, thread_klass)
     self.repo = repo
 
+BASE_URL = "http://image.weather.gov.cn"
+
 class BlobBuilderThread(BuilderThread):
+  def download_to_base64(self, url):
+    content = None
+    try:
+      remote_file = urllib2.urlopen(url ,timeout = 10)
+      content = base64.encodestring(remote_file.read())
+    except Exception as e:
+      logging.error("Fail to download %s: %s" % (url, e))
+    return content
+
+  def create_blob(self, content):
+    sha = None
+    try:
+      blob = self.builder.repo.create_git_blob(content, 'base64')
+      sha = blob.sha
+    except Exception as e:
+      logging.error("Fail to create blob: %s" % (e))
+    return sha
+
   def build(self, task):
     logging.info("Building blob from %s" % (task.url))
+    content = self.download_to_base64(BASE_URL + task.url)
+    if not content:
+      return False
+    sha = self.create_blob(content)
+    if not sha:
+      return False
+    task.blob = sha
+    logging.info("Blob: %s" % (sha))
     self.builder.append(task)
     return True
 
