@@ -2,6 +2,7 @@ from task_base import *
 from models import *
 from crawler import *
 from datetime import datetime
+from deployers import *
 import logging
 import re
 MAX_FRAME_PER_CRON = 5
@@ -81,10 +82,6 @@ class ImageCrawler(Crawler):
       if station._this_update < t:
         station._this_update = t
 
-      # Gather results
-      if not self.results.has_key(id):
-        self.results[id] = []
-
 
 class FrameTaskHandler(TaskHandler):
   def get_name(self):
@@ -125,6 +122,9 @@ class FrameTaskHandler(TaskHandler):
     # logging.info("Write %d frames to datastore" % len(all_frames))
     # ndb.put_multi(all_frames)
     # Update time
+    logging.info("Start deploying")
+    deployer = GitHubDeployer(crawler.results)
+    deployer.deploy()
     logging.info("Update stations in datastore")
     for station in stations.values():
       if station._this_update != None:

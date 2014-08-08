@@ -1,1 +1,1 @@
-from github import *
+from gh import *
