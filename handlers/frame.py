@@ -117,10 +117,13 @@ class FrameTaskHandler(TaskHandler):
     # TODO: download images and create blobs
     # TODO: create tree
     # TODO: commit to GitHub
+    # NOTE: this will cause thousands+ datastore write ops per cron,
+    #       which would burn through all 50k free quota very quickly.
+    #       We'll use GitHub API to determine frame lists after commit
     # Update frames
-    all_frames = reduce(lambda f1, f2: f1 + f2, crawler.results.values())
-    logging.info("Write %d frames to datastore" % len(all_frames))
-    ndb.put_multi(all_frames)
+    # all_frames = reduce(lambda f1, f2: f1 + f2, crawler.results.values())
+    # logging.info("Write %d frames to datastore" % len(all_frames))
+    # ndb.put_multi(all_frames)
     # Update time
     logging.info("Update stations in datastore")
     for station in stations.values():

@@ -5,4 +5,4 @@ cron:
   timezone: Asia/Chongqing
 - description: Update frames (every 10 minutes)
   url: /tasks/frame
-  schedule: every 10 minutes
+  schedule: every 6 hours
