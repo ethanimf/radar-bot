@@ -4,6 +4,100 @@ from lib.github import *
 import config
 import base64
 import logging
+import time
+import Queue
+import threading
+
+class BuilderThread(threading.Thread):
+  def __init__(self, builder, id, max_retry = 3):
+    threading.Thread.__init__(self)
+    self.builder = builder
+    self.id = id
+    self.max_retry = max_retry
+    self.current_retry = 0
+    self.init()
+
+  def init(self):
+    pass
+
+  def run(self):
+    builder = self.builder
+    queue = builder.queue
+    logging.debug("Thread %d started" % (self.id))
+    while not builder.should_exit:
+      if not queue.empty():
+        task = queue.get()
+        self.current_retry = 0
+        succ = False
+        while self.current_retry <= self.max_retry:
+          if self.current_retry > 0:
+            logging.warning("Failed last time, retrying (%d/%d)" % (self.current_retry, self.max_retry))
+          # Build
+          succ = self.build(task)
+          if succ:
+            break
+          self.current_retry += 1
+        if not succ:
+          logging.error("Fail to run %s" % (task[0]))
+          queue.task_done()
+          builder.fail_count += 1
+      time.sleep(1)
+  def build(self, task):
+    self.builder.append(task)
+    return True
+
+class Builder(object):
+  def __init__(self, max_thread = 10, thread_klass = BuilderThread):
+    self.max_thread = max_thread
+    self._threads = []
+    self.queue = Queue.Queue()
+    self.should_exit = False
+    self._thread_klass = thread_klass
+    self.fail_count = 0
+    self.results = []
+
+  def append(self, result):
+    self.results.append(result)
+    if self.on_append(result):
+      self.queue.task_done()
+
+  def on_append(self, result):
+    return True
+
+  def _init_threads(self):
+    for id in range(self.max_thread):
+      t = self._thread_klass(self, id)
+      self._threads.append(t)
+      t.start()
+
+  def build(self, tasks):
+    # Create threads to size
+    self._init_threads()
+    logging.info("Put %d tasks" % (len(tasks)))
+    # Put tasks
+    for task in tasks:
+      self.queue.put(task)
+    logging.info("Waiting for tasks")
+    # Wait
+    self.queue.join()
+    logging.info("Tasks completed")
+    # Notify threads to exit
+    self.should_exit = True
+    # Wait
+    for t in self._threads:
+      t.join()
+    logging.info("Threads completed")
+
+class RepoBuilder(Builder):
+  def __init__(self, repo, max_thread = 10, thread_klass = BuilderThread):
+    Builder.__init__(self, max_thread, thread_klass)
+    self.repo = repo
+
+class BlobBuilderThread(BuilderThread):
+  def build(self, task):
+    logging.info("Building blob from %s" % (task.url))
+    self.builder.append(task)
+    return True
 
 class GitHubDeployer(object):
   def __init__(self, payload):
@@ -60,7 +154,10 @@ class GitHubDeployer(object):
   def deploy(self):
     if not self.auth():
       return False
-
+    # Prepare blobs for every frame
+    all_frames = reduce(lambda f1, f2: f1 + f2, self.payload.values())
+    blob_builder = RepoBuilder(self.repo, thread_klass = BlobBuilderThread)
+    blob_builder.build(all_frames)
     return True
 
 def open_and_encode(path):
