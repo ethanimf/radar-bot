@@ -1,4 +1,5 @@
 from google.appengine.ext import ndb
+from datetime import datetime
 import re
 
 MODEL_VERSION = 3
@@ -20,6 +21,7 @@ class Station(ndb.Model):
   station_id = ndb.StringProperty()
   last_update = ndb.DateTimeProperty()
   last_commit = ndb.StringProperty()
+  _this_update = datetime.min
 
   @classmethod
   def create_query_for_all(cls):

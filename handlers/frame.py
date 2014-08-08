@@ -43,12 +43,13 @@ def extract_frame_info(script_url):
   timestamp = m.group(3)
   time = datetime.strptime(timestamp, TIME_STAMP_FORMAT)
   station_id = m.group(2)
-  return (url, time, station_id)
+  return (url, time, station_id, timestamp)
 
 class ImageCrawler(Crawler):
   def __init__(self):
     Crawler.__init__(self, [IMG_URL_RE, IMG_ENLARGE_RE], [], 1, 10, ImageCrawlerThread)
     self.results = {}
+    self.new_frame_count = 0
 
   def on_append(self, urls, level, context):
     # TODO: fill results. Group frames by stations
@@ -56,7 +57,6 @@ class ImageCrawler(Crawler):
       return
     if len(urls) == 0:
       return
-    last_update = datetime.min
     for url in urls:
       r = extract_frame_info(url)
       if not r:
@@ -65,13 +65,21 @@ class ImageCrawler(Crawler):
       t = r[1]
       id = r[2]
       station = self.stations.get(id)
-      # Note: this is wrong, station.last_update should be updated when
-      #       all new frames are determined
-      # Find newest frame
-      if last_update < t:
-        last_update = t
-        if station.last_update == None or station.last_update < last_update:
-          station.last_update = last_update
+      if station == None:
+        logging.warning("Unknown station id %s from %s" % (id, context))
+        continue
+      # New frame
+      if station.last_update == None or station.last_update < t:
+        self.new_frame_count += 1
+        if not self.results.has_key(id):
+          self.results[id] = []
+        frame = Frame.create_from_frame_info(station, r)
+        self.results[id].append(frame)
+
+      # Keep track of newst frame in this update
+      # and set to station.last_update later
+      if station._this_update < t:
+        station._this_update = t
 
       # Gather results
       if not self.results.has_key(id):
@@ -85,7 +93,12 @@ class FrameTaskHandler(TaskHandler):
   def run_task(self):
     # Query station list
     query = Station.create_query_for_all()
-    logging.info("Find %d stations in store" % (query.count()))
+    station_count = query.count()
+    logging.info("Find %d stations in store" % (station_count))
+    if station_count == 0:
+      logging.warning("No stations found in datastore. Didn't run /tasks/station?")
+      self.response.set_status(200)
+      return
     # TODO: get frame image urls
     tasks = []
     stations = {}
@@ -98,10 +111,19 @@ class FrameTaskHandler(TaskHandler):
     crawler = ImageCrawler()
     crawler.stations = stations
     crawler.walk_with_context(tasks)
-    logging.info("Find %d frames" % (len(crawler.urls)))
+    logging.info("Find %d frames, %d new since last update" % (len(crawler.urls), crawler.new_frame_count))
     # TODO: download images and create blobs
     # TODO: create tree
     # TODO: commit to GitHub
+    # Update frames
+    all_frames = reduce(lambda f1, f2: f1 + f2, crawler.results.values())
+    logging.info("Write %d frames to datastore" % len(all_frames))
+    ndb.put_multi(all_frames)
+    # Update time
+    logging.info("Update stations in datastore")
+    for station in stations.values():
+      if station._this_update != None:
+        station.last_update = station._this_update
     # Put changes
     ndb.put_multi(stations.values())
     self.response.set_status(200)
