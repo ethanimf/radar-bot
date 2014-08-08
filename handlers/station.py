@@ -54,6 +54,8 @@ class StationTaskHandler(TaskHandler):
       if station != None:
         stations.append(station)
     ndb.put_multi(stations)
+    if crawler.fail_count > 0:
+      logging.warning("%d tasks failed" % (crawler.fail_count))
     logging.info("Found %d stations, %d with known ID" % (len(crawler.urls), len(crawler.station_id_table)))
     #logservice.flush()
     self.response.set_status(200)

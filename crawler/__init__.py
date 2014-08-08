@@ -34,37 +34,34 @@ class Fetcher(object):
     return (request, handle)
 
   def fetch(self):
-    request, handle = self.open()
-    self._addHeaders(request)
-    if handle:
-      try:
+    try:
+      request, handle = self.open()
+      self._addHeaders(request)
+      if handle:
         content = unicode(handle.open(request, timeout=10).read(), "utf-8",
           errors="replace")
         soup = BeautifulSoup(content)
         tags = soup('a')
-      except urllib2.HTTPError, error:
-        if error.code == 404:
-          logging.error("ERROR: %s -> %s" % (error, error.url))
-        else:
-          logging.error("ERROR: %s" % error)
-        tags = []
-      except urllib2.URLError, error:
-        logging.error("ERROR: %s" % error)
-        tags = []
-      for tag in tags:
-        href = tag.get("href")
-        if href is not None:
-          url = urlparse.urljoin(self.url, escape(href))
-          if url not in self:
-            self.urls.append(url)
+        for tag in tags:
+          href = tag.get("href")
+          if href is not None:
+            url = urlparse.urljoin(self.url, escape(href))
+            if url not in self:
+              self.urls.append(url)
+    except Exception as e:
+      logging.error("Error when fetching: %s" % (e))
+      return False
+    return True
 
 class CrawlerThread(threading.Thread):
-  def __init__(self, crawler, id):
+  def __init__(self, crawler, id, max_retry = 3):
     threading.Thread.__init__(self)
     self.crawler = crawler
     self.id = id
     self.idle = True
     self.init()
+    self.max_retry = max_retry
+    self.current_retry = 0
 
   def init(self):
     pass
@@ -76,8 +73,20 @@ class CrawlerThread(threading.Thread):
       if not crawler.queue.empty():
         self.idle = False
         task = crawler.queue.get()
-        # walk
-        self.walk(task)
+        self.current_retry = 0
+        succ = False
+        while self.current_retry <= self.max_retry:
+          if self.current_retry > 0:
+            logging.warning("Failed last time, retrying (%d/%d)" % (self.current_retry, self.max_retry))
+          # walk
+          succ = self.walk(task)
+          if succ:
+            break
+          self.current_retry += 1
+        if not succ:
+          logging.error("Fail to run %s" % (task[0]))
+          crawler.queue.task_done()
+          crawler.fail_count += 1
         # done
         #crawler.queue.task_done()
         self.idle = True
@@ -96,7 +105,10 @@ class CrawlerThread(threading.Thread):
 
   def walk_one(self, url, context):
     page = Fetcher(url)
-    page.fetch()
+    succ = page.fetch()
+    if not succ:
+      logging.error("Walk %s failed" % (url))
+      return
     # Use url as default context
     if context == None:
       context = url
@@ -117,7 +129,10 @@ class CrawlerThread(threading.Thread):
     context = task[2]
     crawler = self.crawler
     urls = self.walk_one(url, context)
+    if not urls:
+      return False
     crawler.append(urls, level, context)
+    return True
 
 class Crawler(object):
   def __init__(self, white_rules, black_rules, max_level = 2, max_thread = 10, thread_klass = CrawlerThread):
@@ -131,6 +146,7 @@ class Crawler(object):
     self.queue = Queue.Queue()
     self.shouldExit = False
     self._thread_klass = thread_klass
+    self.fail_count = 0
 
   def append(self, urls, level, context = None):
     # Append results

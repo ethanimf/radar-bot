@@ -111,6 +111,8 @@ class FrameTaskHandler(TaskHandler):
     crawler = ImageCrawler()
     crawler.stations = stations
     crawler.walk_with_context(tasks)
+    if crawler.fail_count > 0:
+      logging.warning("%d tasks failed" % (crawler.fail_count))
     logging.info("Find %d frames, %d new since last update" % (len(crawler.urls), crawler.new_frame_count))
     # TODO: download images and create blobs
     # TODO: create tree
