@@ -1,7 +1,7 @@
 cron:
 - description: Update station URL list (daily)
   url: /tasks/station
-  schedule: every day 18:48
+  schedule: every day 19:55
   timezone: Asia/Chongqing
 - description: Update frames (every 10 minutes)
   url: /tasks/frame
