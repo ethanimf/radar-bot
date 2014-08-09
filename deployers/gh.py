@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 import Queue
 import threading
+import json
 
 class BuilderThread(threading.Thread):
   def __init__(self, builder, id, max_retry = 3):
@@ -130,6 +131,11 @@ class BlobBuilderThread(BuilderThread):
     return True
 
 class TreeBuilderThread(BuilderThread):
+  def build_frame_json(self, frame_names):
+    # Newest first
+    frame_names.sort(reverse = True)
+    return json.dumps(frame_names)
+
   def build(self, task):
     id = task[0]
     frames = task[1]
@@ -148,6 +154,17 @@ class TreeBuilderThread(BuilderThread):
     elements = [InputGitTreeElement(frame.get_file_name(), '100644', 'blob', sha = frame.blob) for frame in frames]
     if old_tree:
       elements += [InputGitTreeElement(e.path, e.mode, e.type, sha = e.sha) for e in old_tree.tree]
+    # Build frames.json
+    frame_names = []
+    for el in elements:
+      identity = el._identity
+      if identity['type'] != 'blob' or identity['path'] == 'frames.json':
+        continue
+      frame_names.append(identity['path'])
+    json_content = self.build_frame_json(frame_names)
+    # Create frames.json blob
+    json_blob = self.builder.repo.create_git_blob(json_content, 'utf-8')
+    elements.append(InputGitTreeElement('frames.json', '100644', 'blob', sha = json_blob.sha))
     # Create tree
     tree = self.builder.repo.create_git_tree(elements)
     for frame in frames:
