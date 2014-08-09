@@ -780,7 +780,7 @@ class Repository(github.GithubObject.CompletableGithubObject):
         :param base_tree: :class:`github.GitTree.GitTree`
         :rtype: :class:`github.GitTree.GitTree`
         """
-        assert all(isinstance(element, github.InputGitTreeElement) for element in tree), tree
+        #assert all(isinstance(element, github.InputGitTreeElement) for element in tree), tree
         assert base_tree is github.GithubObject.NotSet or isinstance(base_tree, github.GitTree.GitTree), base_tree
         post_parameters = {
             "tree": [element._identity for element in tree],

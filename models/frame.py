@@ -9,6 +9,11 @@ class Frame(ndb.Model):
   blob = ndb.StringProperty()
   tree = ndb.StringProperty()
   commit = ndb.StringProperty()
+
+  def get_file_name(self):
+    m = re.match(".*/(.*)\?.*", self.url)
+    return m.group(1)
+
   @classmethod
   def create_from_frame_info(cls, station, info, put_now = False):
     url = info[0]

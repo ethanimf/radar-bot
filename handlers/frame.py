@@ -103,6 +103,9 @@ class FrameTaskHandler(TaskHandler):
       #logging.debug("Station: %s, Url: %s" % (station.name, station.url))
       tasks.append((station.url, station))
       stations[station.station_id] = station
+      # Do 10 station only to save time
+      # if len(tasks) >= 10:
+      #  break
     # TODO: spawn frame crawlers for each frame (with last_updated and max_frame_count)
     logging.info("Start frame crawler")
     crawler = ImageCrawler()

@@ -6,6 +6,7 @@ import config
 import base64
 import logging
 import time
+from datetime import datetime
 import Queue
 import threading
 
@@ -128,6 +129,43 @@ class BlobBuilderThread(BuilderThread):
     self.builder.append(task)
     return True
 
+class TreeBuilderThread(BuilderThread):
+  def build(self, task):
+    id = task[0]
+    frames = task[1]
+    old_tree_sha = task[2]
+    logging.info("Build tree %s for %d frames based upon %s" % (id, len(frames), old_tree_sha))
+    # Get old tree
+    old_tree = None
+    if old_tree_sha:
+      # Get old tree
+      try:
+        old_tree = self.builder.repo.get_git_tree(old_tree_sha)
+      except Exception as e:
+        logging.error("Fail to get tree %s: %s" % (old_tree_sha, e))
+        return False
+    # Create tree element list
+    elements = [InputGitTreeElement(frame.get_file_name(), '100644', 'blob', sha = frame.blob) for frame in frames]
+    if old_tree:
+      elements += [InputGitTreeElement(e.path, e.mode, e.type, sha = e.sha) for e in old_tree.tree]
+    # Create tree
+    tree = self.builder.repo.create_git_tree(elements)
+    for frame in frames:
+      frame.tree = tree.sha
+    self.builder.append((id, tree.sha))
+    logging.info("Tree: %s" % (tree.sha))
+    return True
+
+def print_tree(repo, sha, path = '/'):
+  print "Tree %s:" % (path)
+  sub_trees = []
+  tree = repo.get_git_tree(sha)
+  for e in tree.tree:
+    print "%s %s %s" % (e.sha, e.type, e.path)
+    if e.type == 'tree':
+      sub_trees.append((e.sha, e.path))
+  [print_tree(repo, s[0], path + s[1] + '/') for s in sub_trees]
+
 class GitHubDeployer(object):
   def __init__(self, payload):
     self.payload = payload
@@ -183,25 +221,74 @@ class GitHubDeployer(object):
   def deploy(self):
     if not self.auth():
       return False
+    # Check
+    if len(self.payload) == 0:
+      logging.info("Nothing to deploy")
+      return True
     # Prepare blobs for every frame
     all_frames = reduce(lambda f1, f2: f1 + f2, self.payload.values())
     blob_builder = RepoBuilder(self.repo, thread_klass = BlobBuilderThread)
     blob_builder.build(all_frames)
+    # Read old trees
+    last_commit_sha = self.branch.commit.sha
+    logging.info("Reading root tree @%s" % (last_commit_sha))
+    root = self.repo.get_git_tree(last_commit_sha)
+    old_trees = {}
+    for e in root.tree:
+      if e.type != 'tree':
+        continue
+      if self.payload.has_key(e.path):
+        old_trees[e.path] = e.sha
+    #print_tree(self.repo, self.branch.commit.sha)
+    # Prepare trees for every stations
+    logging.info("Creating sub trees")
+    all_trees = []
+    for id, frames in self.payload.iteritems():
+      all_trees.append((id, frames, old_trees.get(id)))
+    tree_builder = RepoBuilder(self.repo, thread_klass = TreeBuilderThread)
+    tree_builder.build(all_trees)
+    # Make new root tree
+    logging.info("Create new root")
+    new_trees = {}
+    for t in tree_builder.results:
+      new_trees[t[0]] = t[1]
+    new_root_elements = []
+    for e in root.tree:
+      if e.type == 'tree' and new_trees.has_key(e.path):
+        new_sha = new_trees[e.path]
+        logging.info("Replace tree %s with %s" % (e.path, new_sha))
+        # replace with new tree
+        new_e = InputGitTreeElement(e.path, '040000', 'tree', sha = new_sha)
+        new_root_elements.append(new_e)
+        del new_trees[e.path]
+      else:
+        new_root_elements.append(InputGitTreeElement(e.path, e.mode, e.type, sha = e.sha))
+
+    for path in new_trees:
+      new_sha = new_trees[path]
+      logging.info("Add new tree %s to %s" % (new_sha, path))
+      new_e = InputGitTreeElement(path, '040000', 'tree', sha = new_sha)
+      new_root_elements.append(new_e)
+
+
+    new_root = self.repo.create_git_tree(new_root_elements)
+    logging.info("New root tree: %s" % (new_root.sha))
+    # Make commit
+    parent_commit = self.repo.get_git_commit(last_commit_sha)
+    message = "Update %d frames for %d stations at %s" % (len(all_frames), len(self.payload), datetime.now())
+    new_commit = self.repo.create_git_commit(message, new_root, [parent_commit])
+    logging.info("Commit: %s" % new_commit.sha)
+    logging.info("Message: %s" % message)
+    # Update ref
+    logging.info("Update ref")
+    self.ref.edit(new_commit.sha)
+    # Done
+    logging.info("Deploy finished")
     return True
 
 def open_and_encode(path):
   with open(path, 'rb') as image_f:
     return base64.b64encode(image_f.read())
-
-def print_tree(repo, sha, path = '/'):
-  print "Tree %s:" % (path)
-  sub_trees = []
-  tree = repo.get_git_tree(sha)
-  for e in tree.tree:
-    print "%s %s %s" % (e.sha, e.type, e.path)
-    if e.type == 'tree':
-      sub_trees.append((e.sha, e.path))
-  [print_tree(repo, s[0], path + s[1] + '/') for s in sub_trees]
 
 def main():
   # print "Log in %s" % (config.GITHUB_ACCOUNT)
