@@ -171,13 +171,24 @@ class GitHubDeployer(object):
     self.payload = payload
 
   def auth(self):
-    logging.info("Log in %s" % (config.GITHUB_ACCOUNT))
-    g = Github(config.GITHUB_ACCOUNT, config.GITHUB_PASSWORD)
+    for account in config.ACCOUNTS:
+      if self.auth_one(account[0], account[1]):
+        return True
+    logging.error("All GitHub accounts failed to be authenticated")
+
+  def auth_one(self, username, password):
+    logging.info("Log in %s" % (username))
+    g = Github(username, password)
     self.g = g
 
     user = g.get_user()
-    logging.info("Logged in as %s" % (user.login))
+    rate = g.rate_limiting
+    logging.info("Logged in as %s, rate: (%d/%d)" % (user.login, rate[0], rate[1]))
     self.user = user
+
+    if rate[0] < 1000:
+      logging.warning("Not enough GitHub API Rate, try another")
+      return False
 
     orgs = user.get_orgs()
     org = None
