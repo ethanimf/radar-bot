@@ -6,3 +6,6 @@ cron:
 - description: Update frames (every 10 minutes)
   url: /tasks/frame
   schedule: every 10 minutes
+- description: Clean GitHub (every 12 hours)
+  url: /tasks/clean
+  schedule: every 12 hours

@@ -21,5 +21,6 @@ from handlers import *
 app = webapp2.WSGIApplication([
   ('/', MainHandler),
   ('/tasks/station', StationTaskHandler),
-  ('/tasks/frame', FrameTaskHandler)
+  ('/tasks/frame', FrameTaskHandler),
+  ('/tasks/clean', CleanTaskHandler)
 ], debug=True)

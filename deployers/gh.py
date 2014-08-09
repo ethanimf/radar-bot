@@ -188,6 +188,32 @@ class GitHubDeployer(object):
     self.payload = payload
     self.type = type
 
+  def clean(self):
+    try:
+      self.auth()
+    except Exception as e:
+      logging.warning("Auth with error: %s" % (e))
+    if not self.user:
+      return False
+    # Remove repository
+    logging.info("Removing repository")
+    if self.repo:
+      self.repo.delete()
+    # Create repository
+    logging.info("Creating repository")
+    self.repo = self.org.create_repo(config.REPO_NAME, auto_init = True)
+    if config.BRANCH == 'master':
+      return True
+    master = self.repo.get_branch('master')
+
+    # Create branch
+    ref_name = "refs/heads/%s" % (config.BRANCH)
+    logging.info("Creating ref %s" % (ref_name))
+    ref = self.repo.create_git_ref(ref_name, master.commit.sha)
+    self.repo.edit(config.REPO_NAME, default_branch = config.BRANCH)
+    logging.info("Ref created: %s" % (ref.url))
+    return True
+
   def auth(self):
     for account in config.ACCOUNTS:
       if self.auth_one(account[0], account[1]):
