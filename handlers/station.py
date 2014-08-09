@@ -1,6 +1,7 @@
 from task_base import *
 from crawler import *
 from models import *
+from deployers import *
 #from google.appengine.api import logservice
 #import logging
 
@@ -54,6 +55,11 @@ class StationTaskHandler(TaskHandler):
       if station != None:
         stations.append(station)
     ndb.put_multi(stations)
+    # Deploy
+    logging.info("Deployer station.json")
+    deployer = GitHubDeployer(stations, type = 'station')
+    deployer.deploy()
+    # Log
     if crawler.fail_count > 0:
       logging.warning("%d tasks failed" % (crawler.fail_count))
     logging.info("Found %d stations, %d with known ID" % (len(crawler.urls), len(crawler.station_id_table)))

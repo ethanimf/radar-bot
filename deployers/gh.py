@@ -184,8 +184,9 @@ def print_tree(repo, sha, path = '/'):
   [print_tree(repo, s[0], path + s[1] + '/') for s in sub_trees]
 
 class GitHubDeployer(object):
-  def __init__(self, payload):
+  def __init__(self, payload, type = 'frame'):
     self.payload = payload
+    self.type = type
 
   def auth(self):
     for account in config.ACCOUNTS:
@@ -247,6 +248,38 @@ class GitHubDeployer(object):
     return True
 
   def deploy(self):
+    if self.type == 'frame':
+      return self.deploy_frames()
+    elif self.type == 'station':
+      return self.deploy_stations()
+    return False
+
+  def deploy_stations(self):
+    if not self.auth():
+      return False
+    if len(self.payload) == 0:
+      logging.info("Nothing to deploy")
+      return True
+
+    # Create JSON
+    json_obj = [{
+      "id": station.station_id,
+      "name": station.name,
+      "lat": station.lat,
+      "lng": station.lng,
+      "range": station.range
+      }
+      for station in self.payload
+    ]
+    json_content = json.dumps(json_obj)
+
+    # Create blob
+    # Update tree
+    # Create commit
+    # Update ref
+    return True
+
+  def deploy_frames(self):
     if not self.auth():
       return False
     # Check
