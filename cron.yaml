@@ -1,11 +1,12 @@
 cron:
 - description: Update station URL list (daily)
   url: /tasks/station
-  schedule: every day 19:55
+  schedule: every day 20:20
   timezone: Asia/Chongqing
 - description: Update frames (every 10 minutes)
   url: /tasks/frame
   schedule: every 10 minutes
 - description: Clean GitHub (every 12 hours)
   url: /tasks/clean
-  schedule: every 12 hours
+  schedule: every day 3:00
+  timezone: Asia/Chongqing
