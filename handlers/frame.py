@@ -101,13 +101,15 @@ class FrameTaskHandler(TaskHandler):
     stations = {}
     for station in query.iter():
       #logging.debug("Station: %s, Url: %s" % (station.name, station.url))
+      if not station.frame_range:
+        continue
       tasks.append((station.url, station))
       stations[station.station_id] = station
       # Do 10 station only to save time
       # if len(tasks) >= 10:
       #  break
     # TODO: spawn frame crawlers for each frame (with last_updated and max_frame_count)
-    logging.info("Start frame crawler")
+    logging.info("Start frame crawler for %d stations" % (len(tasks)))
     crawler = ImageCrawler()
     crawler.stations = stations
     crawler.walk_with_context(tasks)
