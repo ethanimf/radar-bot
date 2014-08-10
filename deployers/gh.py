@@ -230,7 +230,7 @@ class GitHubDeployer(object):
     logging.info("Logged in as %s, rate: (%d/%d)" % (user.login, rate[0], rate[1]))
     self.user = user
 
-    if rate[0] < 1000:
+    if rate[0] < 100:
       logging.warning("Not enough GitHub API Rate, try another")
       return False
 
@@ -281,8 +281,8 @@ class GitHubDeployer(object):
     return False
 
   def deploy_stations(self):
-    # if not self.auth():
-    #   return False
+    if not self.auth():
+      return False
     if len(self.payload) == 0:
       logging.info("Nothing to deploy")
       return True
@@ -301,11 +301,51 @@ class GitHubDeployer(object):
     logging.info("Find %d valid stations" % (len(json_obj)))
     json_content = json.dumps(json_obj)
     logging.info(json_content)
-    # Create blob
-    # Update tree
-    # Create commit
-    # Update ref
-    return True
+
+    # Deploy
+    max_retry = 5
+    current_retry = 0
+    blob = None
+    root = None
+    new_root = None
+    parent_commit = None
+    commit = None
+    succ = False
+    while current_retry <= max_retry:
+      if current_retry > 0:
+        logging.warning("Retry (%d/%d)" % (current_retry, max_retry))
+      current_retry += 1
+      try:
+        # Create blob
+        if not blob:
+          blob = self.repo.create_git_blob(json_content, 'utf-8')
+        logging.info("Blob: %s" % (blob.sha))
+        # Update tree
+        last_commit_sha = self.branch.commit.sha
+        if not root:
+          root = self.repo.get_git_tree(last_commit_sha)
+        if not new_root:
+          elements = []
+          for e in root.tree:
+            if e.path != 'stations.json':
+              elements.append(InputGitTreeElement(e.path, e.mode, e.type, sha = e.sha))
+          elements.append(InputGitTreeElement('stations.json', '100644', 'blob', sha = blob.sha))
+          new_root = self.repo.create_git_tree(elements)
+        logging.info("Tree: %s" % (new_root.sha))
+        # Create commit
+        if not parent_commit:
+          parent_commit = self.repo.get_git_commit(last_commit_sha)
+        if not commit:
+          commit = self.repo.create_git_commit("Update stations.json", new_root, [parent_commit])
+        logging.info("Commit: %s" % (commit.sha))
+        # Update ref
+        self.ref.edit(commit.sha)
+        logging.info("Ref updated")
+        succ = True
+        break
+      except Exception as e:
+        logging.error("Deploy error: %s" % (e))
+    return succ
 
   def deploy_frames(self):
     if not self.auth():

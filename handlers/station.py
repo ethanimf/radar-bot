@@ -109,9 +109,13 @@ class StationTaskHandler(TaskHandler):
     # Deploy
     logging.info("Deployer station.json")
     deployer = GitHubDeployer(stations, type = 'station')
-    deployer.deploy()
-    self.response.set_status(200)
+    deployed = deployer.deploy()
+    logging.info("Deployed: %s" % (deployed))
     # Log
     if crawler.fail_count > 0:
       logging.warning("%d tasks failed" % (crawler.fail_count))
     logging.info("Found %d stations, %d with known ID, %d with known location" % (len(crawler.urls), len(crawler.station_id_table), location_known_count))
+    if deployed:
+      self.response.set_status(200)
+    else:
+      self.response.set_status(200)
