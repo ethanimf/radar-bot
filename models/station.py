@@ -21,6 +21,8 @@ class Station(ndb.Model):
   station_id = ndb.StringProperty()
   last_update = ndb.DateTimeProperty()
   last_commit = ndb.StringProperty()
+  location = ndb.GeoPtProperty()
+  frame_range = ndb.IntegerProperty()
   _this_update = datetime.min
 
   @classmethod

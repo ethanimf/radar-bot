@@ -2,6 +2,8 @@ from task_base import *
 from crawler import *
 from models import *
 from deployers import *
+import xml.etree.ElementTree as ET
+import json
 #from google.appengine.api import logservice
 #import logging
 
@@ -43,26 +45,73 @@ class StationTaskHandler(TaskHandler):
   def get_name(self):
     return 'station'
 
+  def read_station_info(self):
+    info = {}
+    logging.info("Reading station locations")
+    xml_root = ET.parse('data/radar.xml').getroot()
+    logging.info(str(xml_root))
+    for child in xml_root:
+      attrs = child.attrib
+      id = attrs['id'][1:]
+      info[id] = {
+        "lat": attrs['y'],
+        "lng": attrs['x'],
+        "pn" : attrs['pn']
+      }
+    logging.info("Find %d locations" % (len(info)))
+    logging.info("Reading station ranges")
+    with open("data/range.json") as json_f:
+      data = json.load(json_f)
+      logging.info("Find %d ranges" % (len(data)))
+      no_loc_count = 0
+      update_count = 0
+      for id in data:
+        if info.has_key(id):
+          info[id]['range'] = data[id]
+          update_count += 1
+        else:
+          no_loc_count += 1
+          logging.warning("Station %s has range but no location" % (id))
+      logging.info("Update %d stations" % (update_count))
+    to_remove = []
+    for id in info:
+      if not info[id].has_key('range'):
+        logging.warning("Station %s has location but no range" % (id))
+        to_remove.append(id)
+    for id in to_remove:
+      del info[id]
+
+    logging.info("Load total %d station inforamtion" % (len(info)))
+    return info
+
   def run_task(self):
+    logging.info("Loading station information")
+    station_info = self.read_station_info()
     logging.info("Create crawler")
     crawler = Crawler(white_rules, black_rules, 3, thread_klass = StationCrawlerThread)
     logging.info("Start walking")
     crawler.walk([start_url])
     logging.info("Walking finished")
     stations = []
+    location_known_count = 0
     for url in crawler.urls:
       station = Station.create_or_update_from_url(url, crawler.station_id_table)
-      if station != None:
-        stations.append(station)
+      if not station:
+        continue
+      if station_info.has_key(station.station_id):
+        i = station_info[station.station_id]
+        station.location = ndb.GeoPt("%s, %s" % (i['lat'], i['lng']))
+        station.frame_range = int(i['range'])
+        # BUG: location_known_count > len(station_info), possible dupilications
+        location_known_count += 1
+      stations.append(station)
     ndb.put_multi(stations)
     # Deploy
     logging.info("Deployer station.json")
     deployer = GitHubDeployer(stations, type = 'station')
     deployer.deploy()
+    self.response.set_status(200)
     # Log
     if crawler.fail_count > 0:
       logging.warning("%d tasks failed" % (crawler.fail_count))
-    logging.info("Found %d stations, %d with known ID" % (len(crawler.urls), len(crawler.station_id_table)))
-    #logservice.flush()
-    self.response.set_status(200)
-    #self.response.write("Found %d stations" % (len(crawler.urls)))
+    logging.info("Found %d stations, %d with known ID, %d with known location" % (len(crawler.urls), len(crawler.station_id_table), location_known_count))

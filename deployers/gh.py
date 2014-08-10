@@ -281,8 +281,8 @@ class GitHubDeployer(object):
     return False
 
   def deploy_stations(self):
-    if not self.auth():
-      return False
+    # if not self.auth():
+    #   return False
     if len(self.payload) == 0:
       logging.info("Nothing to deploy")
       return True
@@ -291,14 +291,16 @@ class GitHubDeployer(object):
     json_obj = [{
       "id": station.station_id,
       "name": station.name,
-      "lat": station.lat,
-      "lng": station.lng,
-      "range": station.range
+      "lat": station.location.lat,
+      "lng": station.location.lon,
+      "range": station.frame_range
       }
       for station in self.payload
+      if station.frame_range
     ]
+    logging.info("Find %d valid stations" % (len(json_obj)))
     json_content = json.dumps(json_obj)
-
+    logging.info(json_content)
     # Create blob
     # Update tree
     # Create commit
