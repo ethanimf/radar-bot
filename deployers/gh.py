@@ -197,11 +197,14 @@ class GitHubDeployer(object):
       return False
     # Remove repository
     logging.info("Removing repository")
-    if self.repo:
+    if hasattr(self, 'repo') and self.repo:
       self.repo.delete()
     # Create repository
     logging.info("Creating repository")
-    self.repo = self.org.create_repo(config.REPO_NAME, auto_init = True)
+    if self.team:
+      self.repo = self.org.create_repo(config.REPO_NAME, auto_init = True, team_id = self.team)
+    else:
+      self.repo = self.org.create_repo(config.REPO_NAME, auto_init = True)
     if config.BRANCH == 'master':
       return True
     master = self.repo.get_branch('master')
@@ -245,6 +248,19 @@ class GitHubDeployer(object):
       logging.error("Cannot find organization: %s" % config.ORG_NAME)
       return False
     self.org = org
+
+    team = None
+    has_team_config = hasattr(config, 'TEAM_NAME') and config.TEAM_NAME
+    logging.info("Teams:")
+    for t in org.get_teams():
+      logging.info("- %s" % t.name)
+      if has_team_config and t.name == config.TEAM_NAME:
+        team = t
+    if team:
+      logging.info("Find team %s" % (team.name))
+    elif has_team_config:
+      logging.warning("Could not find team %s" % (team.name))
+    self.team = team
 
     repo = org.get_repo(config.REPO_NAME)
     if repo != None:
