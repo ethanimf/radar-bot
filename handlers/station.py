@@ -47,40 +47,8 @@ class StationTaskHandler(TaskHandler):
 
   def read_station_info(self):
     info = {}
-    logging.info("Reading station locations")
-    xml_root = ET.parse('data/radar.xml').getroot()
-    logging.info(str(xml_root))
-    for child in xml_root:
-      attrs = child.attrib
-      id = attrs['id'][1:]
-      info[id] = {
-        "lat": attrs['y'],
-        "lng": attrs['x'],
-        "pn" : attrs['pn']
-      }
-    logging.info("Find %d locations" % (len(info)))
-    logging.info("Reading station ranges")
-    with open("data/range.json") as json_f:
-      data = json.load(json_f)
-      logging.info("Find %d ranges" % (len(data)))
-      no_loc_count = 0
-      update_count = 0
-      for id in data:
-        if info.has_key(id):
-          info[id]['range'] = data[id]
-          update_count += 1
-        else:
-          no_loc_count += 1
-          logging.warning("Station %s has range but no location" % (id))
-      logging.info("Update %d stations" % (update_count))
-    to_remove = []
-    for id in info:
-      if not info[id].has_key('range'):
-        logging.warning("Station %s has location but no range" % (id))
-        to_remove.append(id)
-    for id in to_remove:
-      del info[id]
-
+    with open("data/fusion.json") as json_f:
+      info = json.load(json_f)
     logging.info("Load total %d station inforamtion" % (len(info)))
     return info
 
