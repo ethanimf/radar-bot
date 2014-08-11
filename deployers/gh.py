@@ -219,8 +219,11 @@ class GitHubDeployer(object):
 
   def auth(self):
     for account in config.ACCOUNTS:
-      if self.auth_one(account[0], account[1]):
-        return True
+      try:
+        if self.auth_one(account[0], account[1]):
+          return True
+      except Exception as e:
+        logging.error("Auth Error: %s" % (e))
     logging.error("All GitHub accounts failed to be authenticated")
 
   def auth_one(self, username, password):
@@ -363,41 +366,15 @@ class GitHubDeployer(object):
         logging.error("Deploy error: %s" % (e))
     return succ
 
-  def deploy_frames(self):
-    if not self.auth():
-      return False
-    # Check
-    if len(self.payload) == 0:
-      logging.info("Nothing to deploy")
-      return True
-    # Prepare blobs for every frame
-    all_frames = reduce(lambda f1, f2: f1 + f2, self.payload.values())
-    blob_builder = RepoBuilder(self.repo, thread_klass = BlobBuilderThread)
-    blob_builder.build(all_frames)
-    # Read old trees
-    last_commit_sha = self.branch.commit.sha
-    logging.info("Reading root tree @%s" % (last_commit_sha))
-    root = self.repo.get_git_tree(last_commit_sha)
-    old_trees = {}
-    for e in root.tree:
-      if e.type != 'tree':
-        continue
-      if self.payload.has_key(e.path):
-        old_trees[e.path] = e.sha
-    #print_tree(self.repo, self.branch.commit.sha)
-    # Prepare trees for every stations
-    logging.info("Creating sub trees")
-    all_trees = []
-    for id, frames in self.payload.iteritems():
-      all_trees.append((id, frames, old_trees.get(id)))
-    tree_builder = RepoBuilder(self.repo, thread_klass = TreeBuilderThread)
-    tree_builder.build(all_trees)
-    # Make new root tree
+  def make_commit(self, message, root, new_trees):
     logging.info("Create new root")
-    new_trees = {}
-    for t in tree_builder.results:
-      new_trees[t[0]] = t[1]
     new_root_elements = []
+    if self.repo.update():
+      # Fetch new root
+      logging.info("Last commit updated, fetching root")
+      root = self.repo.get_git_tree(last_commit_sha)
+    last_commit_sha = self.branch.commit.sha
+
     for e in root.tree:
       if e.type == 'tree' and new_trees.has_key(e.path):
         new_sha = new_trees[e.path]
@@ -420,10 +397,87 @@ class GitHubDeployer(object):
     logging.info("New root tree: %s" % (new_root.sha))
     # Make commit
     parent_commit = self.repo.get_git_commit(last_commit_sha)
-    message = "Update %d frames for %d stations at %s" % (len(all_frames), len(self.payload), datetime.now())
+    # Race condition could cause 'non-fastforward error'
     new_commit = self.repo.create_git_commit(message, new_root, [parent_commit])
     logging.info("Commit: %s" % new_commit.sha)
     logging.info("Message: %s" % message)
+
+    return new_commit
+
+  def deploy_frames(self):
+    max_retry = 5
+    current_retry = 0
+    stage_succ = False
+
+    if not self.auth():
+      return False
+    # Check
+    if len(self.payload) == 0:
+      logging.info("Nothing to deploy")
+      return True
+    # Prepare blobs for every frame
+    all_frames = reduce(lambda f1, f2: f1 + f2, self.payload.values())
+    blob_builder = RepoBuilder(self.repo, thread_klass = BlobBuilderThread)
+    blob_builder.build(all_frames)
+
+    # Read old trees
+    last_commit_sha = self.branch.commit.sha
+    logging.info("Reading root tree @%s" % (last_commit_sha))
+
+    root = None
+    current_retry = 0
+    stage_succ = False
+
+    while current_retry <= max_retry and not stage_succ:
+      if current_retry > 0:
+        logging.warning("Retry (%d/%d)" % (current_retry, max_retry))
+      try:
+        root = self.repo.get_git_tree(last_commit_sha)
+        stage_succ = True
+      except Exception as e:
+        logging.error("Error: %s" % (e))
+      current_retry += 1
+    if not stage_succ:
+      return False
+
+    old_trees = {}
+    for e in root.tree:
+      if e.type != 'tree':
+        continue
+      if self.payload.has_key(e.path):
+        old_trees[e.path] = e.sha
+    #print_tree(self.repo, self.branch.commit.sha)
+    # Prepare trees for every stations
+    logging.info("Creating sub trees")
+    all_trees = []
+    for id, frames in self.payload.iteritems():
+      all_trees.append((id, frames, old_trees.get(id)))
+    tree_builder = RepoBuilder(self.repo, thread_klass = TreeBuilderThread)
+    tree_builder.build(all_trees)
+
+    # Make new root tree
+    # Note: should update and fetch new root to avoid race condition
+    #       subfolers are OK since only one instance will update them at a time
+    new_trees = {}
+    for t in tree_builder.results:
+      new_trees[t[0]] = t[1]
+    # Make commit
+    new_commit = None
+    current_retry = 0
+    stage_succ = False
+    message = "Update %d frames for %d stations at %s" % (len(all_frames), len(self.payload), datetime.now())
+    while current_retry <= max_retry and not stage_succ:
+      if current_retry > 0:
+        logging.warning("Retry (%d/%d)" % (current_retry, max_retry))
+      try:
+        new_commit = self.make_commit(message, root, new_trees)
+        stage_succ = True
+      except Exception as e:
+        logging.error("Error: %s" % (e))
+      current_retry += 1
+    if not stage_succ:
+      return False
+
     # Update ref
     logging.info("Update ref")
     self.ref.edit(new_commit.sha)
