@@ -102,7 +102,7 @@ class BlobBuilderThread(BuilderThread):
   def download_to_base64(self, url):
     content = None
     try:
-      remote_file = urllib2.urlopen(url ,timeout = 10)
+      remote_file = urllib2.urlopen(url ,timeout = 30)
       content = base64.encodestring(remote_file.read())
     except Exception as e:
       logging.error("Fail to download %s: %s" % (url, e))
@@ -417,7 +417,7 @@ class GitHubDeployer(object):
       return True
     # Prepare blobs for every frame
     all_frames = reduce(lambda f1, f2: f1 + f2, self.payload.values())
-    blob_builder = RepoBuilder(self.repo, thread_klass = BlobBuilderThread)
+    blob_builder = RepoBuilder(self.repo, thread_klass = BlobBuilderThread, max_retry = 10)
     blob_builder.build(all_frames)
 
     # Read old trees
