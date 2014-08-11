@@ -96,11 +96,11 @@ class FrameTaskHandler(TaskHandler):
       logging.warning("No stations found in datastore. Didn't run /tasks/station?")
       self.response.set_status(200)
       return
-    # TODO: get frame image urls
+
+    # Prepare tasks
     tasks = []
     stations = {}
     for station in query.iter():
-      #logging.debug("Station: %s, Url: %s" % (station.name, station.url))
       if not station.frame_range:
         continue
       tasks.append((station.url, station))
@@ -108,7 +108,8 @@ class FrameTaskHandler(TaskHandler):
       # Do 10 station only to save time
       # if len(tasks) >= 10:
       #  break
-    # TODO: spawn frame crawlers for each frame (with last_updated and max_frame_count)
+
+    # Start crawler
     logging.info("Start frame crawler for %d stations" % (len(tasks)))
     crawler = ImageCrawler()
     crawler.stations = stations
@@ -116,17 +117,8 @@ class FrameTaskHandler(TaskHandler):
     if crawler.fail_count > 0:
       logging.warning("%d tasks failed" % (crawler.fail_count))
     logging.info("Find %d frames, %d new since last update" % (len(crawler.urls), crawler.new_frame_count))
-    # TODO: download images and create blobs
-    # TODO: create tree
-    # TODO: commit to GitHub
-    # NOTE: this will cause thousands+ datastore write ops per cron,
-    #       which would burn through all 50k free quota very quickly.
-    #       We'll use GitHub API to determine frame lists after commit
-    # Update frames
-    # all_frames = reduce(lambda f1, f2: f1 + f2, crawler.results.values())
-    # logging.info("Write %d frames to datastore" % len(all_frames))
-    # ndb.put_multi(all_frames)
-    # Update time
+
+    # Deploy
     logging.info("Start deploying")
     deployer = GitHubDeployer(crawler.results)
     deployer.deploy()
@@ -134,6 +126,7 @@ class FrameTaskHandler(TaskHandler):
     for station in stations.values():
       if station._this_update != None:
         station.last_update = station._this_update
+
     # Put changes
     ndb.put_multi(stations.values())
     self.response.set_status(200)
