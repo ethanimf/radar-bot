@@ -116,7 +116,7 @@ class FrameTaskHandler(TaskHandler):
     if config.TASK_GROUP_INDEX == config.TASK_GROUP_COUNT - 1:
       chunk_end = len(tasks)
     task_chunk = tasks[chunk_start:chunk_end]
-    task_chunk = task_chunk[0:1]
+    #task_chunk = task_chunk[0:1]
     station_chunk = {}
     for task in task_chunk:
       station = task[1]

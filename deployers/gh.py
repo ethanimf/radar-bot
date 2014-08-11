@@ -50,7 +50,7 @@ class BuilderThread(threading.Thread):
     return True
 
 class Builder(object):
-  def __init__(self, max_thread = 10, thread_klass = BuilderThread):
+  def __init__(self, max_thread = 10, thread_klass = BuilderThread, max_retry = 3):
     self.max_thread = max_thread
     self._threads = []
     self.queue = Queue.Queue()
@@ -58,6 +58,7 @@ class Builder(object):
     self._thread_klass = thread_klass
     self.fail_count = 0
     self.results = []
+    self.max_retry = max_retry
 
   def append(self, result):
     self.results.append(result)
@@ -69,7 +70,7 @@ class Builder(object):
 
   def _init_threads(self):
     for id in range(self.max_thread):
-      t = self._thread_klass(self, id)
+      t = self._thread_klass(self, id, max_retry = self.max_retry)
       self._threads.append(t)
       t.start()
 
@@ -92,8 +93,8 @@ class Builder(object):
     logging.info("Threads completed")
 
 class RepoBuilder(Builder):
-  def __init__(self, repo, max_thread = 10, thread_klass = BuilderThread):
-    Builder.__init__(self, max_thread, thread_klass)
+  def __init__(self, repo, max_thread = 10, thread_klass = BuilderThread, max_retry = 3):
+    Builder.__init__(self, max_thread, thread_klass, max_retry = max_retry)
     self.repo = repo
 
 BASE_URL = "http://image.weather.gov.cn"
