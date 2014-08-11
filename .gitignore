@@ -32,3 +32,4 @@ _ReSharper*/
 deployers/test_data/
 app.yaml
 cron.yaml
+*.ipynb_checkpoints*
