@@ -30,3 +30,5 @@ _ReSharper*/
 *.pyc
 *config.py
 deployers/test_data/
+app.yaml
+cron.yaml
