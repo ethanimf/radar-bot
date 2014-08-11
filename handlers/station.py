@@ -86,4 +86,4 @@ class StationTaskHandler(TaskHandler):
     if deployed:
       self.response.set_status(200)
     else:
-      self.response.set_status(200)
+      self.response.set_status(500)
