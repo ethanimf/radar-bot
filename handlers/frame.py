@@ -5,6 +5,7 @@ from datetime import datetime
 from deployers import *
 import logging
 import re
+import config
 MAX_FRAME_PER_CRON = 5
 
 class ImageCrawlerThread(CrawlerThread):
@@ -99,21 +100,32 @@ class FrameTaskHandler(TaskHandler):
 
     # Prepare tasks
     tasks = []
-    stations = {}
     for station in query.iter():
       if not station.frame_range:
         continue
       tasks.append((station.url, station))
-      stations[station.station_id] = station
       # Do 10 station only to save time
       # if len(tasks) >= 10:
       #  break
 
+    # Partition tasks
+    logging.info("Instance ID: %d, total: %d" % (config.TASK_GROUP_INDEX, config.TASK_GROUP_COUNT))
+    chunk_size = int(len(tasks) / config.TASK_GROUP_COUNT)
+    chunk_start = config.TASK_GROUP_INDEX * chunk_size
+    chunk_end = chunk_start + chunk_size
+    if config.TASK_GROUP_INDEX == config.TASK_GROUP_COUNT - 1:
+      chunk_end = len(tasks)
+    task_chunk = tasks[chunk_start:chunk_end]
+    station_chunk = {}
+    for task in task_chunk:
+      station = task[1]
+      station_chunk[station.station_id] = station
+
     # Start crawler
-    logging.info("Start frame crawler for %d stations" % (len(tasks)))
+    logging.info("Start frame crawler for %d stations" % (len(task_chunk)))
     crawler = ImageCrawler()
-    crawler.stations = stations
-    crawler.walk_with_context(tasks)
+    crawler.stations = station_chunk
+    crawler.walk_with_context(task_chunk)
     if crawler.fail_count > 0:
       logging.warning("%d tasks failed" % (crawler.fail_count))
     logging.info("Find %d frames, %d new since last update" % (len(crawler.urls), crawler.new_frame_count))
@@ -123,10 +135,10 @@ class FrameTaskHandler(TaskHandler):
     deployer = GitHubDeployer(crawler.results)
     deployer.deploy()
     logging.info("Update stations in datastore")
-    for station in stations.values():
+    for station in station_chunk.values():
       if station._this_update != None:
         station.last_update = station._this_update
 
     # Put changes
-    ndb.put_multi(stations.values())
+    ndb.put_multi(station_chunk.values())
     self.response.set_status(200)
