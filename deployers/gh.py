@@ -370,6 +370,7 @@ class GitHubDeployer(object):
   def make_commit(self, message, root, new_trees):
     logging.info("Create new root")
     new_root_elements = []
+    last_commit_sha = self.branch.commit.sha
     if self.repo.update():
       # Fetch new root
       logging.info("Last commit updated, fetching root")
@@ -472,6 +473,10 @@ class GitHubDeployer(object):
         logging.warning("Retry (%d/%d)" % (current_retry, max_retry))
       try:
         new_commit = self.make_commit(message, root, new_trees)
+
+        # Update ref
+        logging.info("Update ref")
+        self.ref.edit(new_commit.sha)
         stage_succ = True
       except Exception as e:
         logging.error("Error: %s" % (e))
@@ -479,9 +484,6 @@ class GitHubDeployer(object):
     if not stage_succ:
       return False
 
-    # Update ref
-    logging.info("Update ref")
-    self.ref.edit(new_commit.sha)
     # Done
     logging.info("Deploy finished")
     return True
