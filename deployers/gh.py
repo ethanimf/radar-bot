@@ -10,6 +10,9 @@ from datetime import datetime
 import Queue
 import threading
 import json
+from cStringIO import StringIO
+import Image
+import process
 
 class BuilderThread(threading.Thread):
   def __init__(self, builder, id, max_retry = 3):
@@ -104,7 +107,8 @@ class BlobBuilderThread(BuilderThread):
     content = None
     try:
       remote_file = urllib2.urlopen(url ,timeout = 30)
-      content = base64.encodestring(remote_file.read())
+      image = Image.open(StringIO(remote_file.read()))
+      content = process.run_crop_only(image)
     except Exception as e:
       logging.error("Fail to download %s: %s" % (url, e))
     return content
@@ -152,7 +156,7 @@ class TreeBuilderThread(BuilderThread):
         logging.error("Fail to get tree %s: %s" % (old_tree_sha, e))
         return False
     # Create tree element list
-    elements = [InputGitTreeElement(frame.get_file_name(), '100644', 'blob', sha = frame.blob) for frame in frames]
+    elements = [InputGitTreeElement(frame.get_file_name().replace('.GIF', '.PNG'), '100644', 'blob', sha = frame.blob) for frame in frames]
     if old_tree:
       elements += [InputGitTreeElement(e.path, e.mode, e.type, sha = e.sha) for e in old_tree.tree]
     # Build frames.json
