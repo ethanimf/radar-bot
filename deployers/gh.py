@@ -108,7 +108,7 @@ class BlobBuilderThread(BuilderThread):
     try:
       remote_file = urllib2.urlopen(url ,timeout = 30)
       image = Image.open(StringIO(remote_file.read()))
-      content = process.run(image)
+      content = process.run_crop_only(image)
     except Exception as e:
       logging.error("Fail to download %s: %s" % (url, e))
     return content

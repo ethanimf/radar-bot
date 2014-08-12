@@ -360,6 +360,15 @@ def inpaint(image, mask):
 from cStringIO import StringIO
 import base64
 import logging
+
+def run_crop_only(image):
+  logging.info("Start cropping frame")
+  final = crop(image)
+  logging.info("Finish cropping frame")
+  output = StringIO()
+  final.save(output, format = 'PNG', transparency = 0)
+  return base64.encodestring(output.getvalue())
+
 def run(image):
   logging.info("Start processing frame")
   border, radar = extract_borders(crop(image))
